@@ -31,7 +31,7 @@
   inputs.pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
   inputs.pre-commit-hooks.inputs.flake-compat.follows = "";
   # https://github.com/nix-community/poetry2nix/pull/1329
-  inputs.poetry2nix.url = "github:nix-community/poetry2nix";
+  inputs.poetry2nix.url = "github:ismaelkdev/poetry2nix";
   inputs.poetry2nix.inputs.flake-utils.follows = "flake-utils";
   inputs.poetry2nix.inputs.nixpkgs.follows = "nixpkgs";
   inputs.poetry2nix.inputs.treefmt-nix.follows = "";
@@ -100,27 +100,34 @@
           excludes = ["^\\.jupyter/"]; # JUPYTERLAB_DIR
         };
 
-        update-poetry-lock =
-          pkgs.writeShellApplication
-          {
-            name = "update-poetry-lock";
-            runtimeInputs = [
-              pkgs.poetry
-            ];
-            text = ''
-              shopt -s globstar
-              for lock in **/poetry.lock; do
-              (
-                echo Updating "$lock"
-                cd "$(dirname "$lock")"
-                poetry update
-              )
-              done
-            '';
-          };
+        update-poetry-lock = pkgs.writeShellApplication {
+          name = "update-poetry-lock";
+          runtimeInputs = [
+            pkgs.poetry
+          ];
+          text = ''
+            shopt -s globstar
+            for lock in **/poetry.lock; do
+            (
+              echo Updating "$lock"
+              cd "$(dirname "$lock")"
+              poetry update
+            )
+            done
+          '';
+        };
 
         jupyenvLib = lib.makeScope lib.callPackageWith (final: {
-          inherit self system pkgs lib python nix-dart baseArgs kernelLib;
+          inherit
+            self
+            system
+            pkgs
+            lib
+            python
+            nix-dart
+            baseArgs
+            kernelLib
+            ;
           docsLib = final.callPackage ./lib/docs.nix {};
           jupyterLib = final.callPackage ./lib/jupyter.nix {};
         });
@@ -128,23 +135,15 @@
 
         examples = kernelLib.mapKernelsFromPath (self + /examples) ["example"];
         exampleJupyterlabKernelsNew = (
-          lib.mapAttrs'
-          (
-            name: value:
-              lib.nameValuePair
-              ("jupyterlab-kernel-" + name)
-              (jupyterLib.mkJupyterlabNew value)
+          lib.mapAttrs' (
+            name: value: lib.nameValuePair ("jupyterlab-kernel-" + name) (jupyterLib.mkJupyterlabNew value)
           )
           examples
         );
 
-        exampleJupyterlabAllKernelsNew =
-          jupyterLib.mkJupyterlabNew (builtins.attrValues examples);
+        exampleJupyterlabAllKernelsNew = jupyterLib.mkJupyterlabNew (builtins.attrValues examples);
       in {
-        lib =
-          jupyterLib
-          // kernelLib
-          // {};
+        lib = jupyterLib // kernelLib // {};
         packages =
           rec {
             jupyterlab-new = jupyterLib.mkJupyterlabNew ./config.nix;
@@ -174,9 +173,7 @@
           inherit pre-commit;
         };
         apps = {
-          update-poetry-lock =
-            flake-utils.lib.mkApp
-            {drv = self.packages."${system}".update-poetry-lock;};
+          update-poetry-lock = flake-utils.lib.mkApp {drv = self.packages."${system}".update-poetry-lock;};
         };
       }
     ))

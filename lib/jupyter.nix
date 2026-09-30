@@ -14,39 +14,33 @@
     ...
   }: let
     jupyterlabEnvBase = env;
-    jupyterlab-checker =
-      pkgs.writeText "jupyterlab-checker"
-      ''
-        from jupyterlab.commands import build_check, ensure_app;
-        import sys
+    jupyterlab-checker = pkgs.writeText "jupyterlab-checker" ''
+      from jupyterlab.commands import build_check, ensure_app;
+      import sys
 
-        ensure_app_return = ensure_app('.jupyter/lab/share/jupyter/lab')
-        build_check_return = build_check()
-        if ensure_app_return is None and not build_check_return:
-          sys.exit(0)
-        # print(f'{ensure_app_return = }')
-        # print(f'{build_check_return = }')
-        sys.exit(1)
-      '';
-    jupyterlab-cond-build =
-      pkgs.writeShellScript "jupyterlab-cond-build"
-      ''
-        ${jupyterlabEnvBase}/bin/python ${jupyterlab-checker}
-        checker=$?
-        if [ "$checker" -ne 0 ]
-        then
-          >&2 echo "[$(date +'%Y-%m-%d %H:%M:%S') jupyenv] needs to build JupyterLab."
-          # we need to build the jupyter lab environment before it can be used
-          PATH='${jupyterlabEnvBase}/bin':$PATH ${jupyterlabEnvBase}/bin/jupyter lab build
-        else
-          >&2 echo "[$(date +'%Y-%m-%d %H:%M:%S') jupyenv] does not need build JupyterLab."
-          >&2 echo "[$(date +'%Y-%m-%d %H:%M:%S') jupyenv] Starting..."
-        fi
-      '';
+      ensure_app_return = ensure_app('.jupyter/lab/share/jupyter/lab')
+      build_check_return = build_check()
+      if ensure_app_return is None and not build_check_return:
+        sys.exit(0)
+      # print(f'{ensure_app_return = }')
+      # print(f'{build_check_return = }')
+      sys.exit(1)
+    '';
+    jupyterlab-cond-build = pkgs.writeShellScript "jupyterlab-cond-build" ''
+      ${jupyterlabEnvBase}/bin/python ${jupyterlab-checker}
+      checker=$?
+      if [ "$checker" -ne 0 ]
+      then
+        >&2 echo "[$(date +'%Y-%m-%d %H:%M:%S') jupyenv] needs to build JupyterLab."
+        # we need to build the jupyter lab environment before it can be used
+        PATH='${jupyterlabEnvBase}/bin':$PATH ${jupyterlabEnvBase}/bin/jupyter lab build
+      else
+        >&2 echo "[$(date +'%Y-%m-%d %H:%M:%S') jupyenv] does not need build JupyterLab."
+        >&2 echo "[$(date +'%Y-%m-%d %H:%M:%S') jupyenv] Starting..."
+      fi
+    '';
   in
-    pkgs.runCommand "chmod-${jupyterlabEnvBase.name}"
-    {nativeBuildInputs = [pkgs.makeWrapper];}
-    ''
+    pkgs.runCommand "chmod-${jupyterlabEnvBase.name}" {nativeBuildInputs = [pkgs.makeWrapper];} ''
       mkdir -p $out/bin
       for i in ${jupyterlabEnvBase}/bin/*; do
         filename=$(basename $i)
@@ -78,10 +72,12 @@
     #, logo32,                  # optional; type: absolute store path
     #, logo64,                  # optional; type: absolute store path
     #}:
-    kernelInstance =
-      builtins.removeAttrs kernelInstance_ ["path"];
+    kernelInstance = builtins.removeAttrs kernelInstance_ ["path"];
 
-    kernelLogos = ["logo32" "logo64"];
+    kernelLogos = [
+      "logo32"
+      "logo64"
+    ];
   in
     pkgs.runCommand "${kernelInstance.name}-jupyter-kernel"
     {
@@ -122,7 +118,11 @@
     jupyterDir = let
       mergedNotebookConfig = lib.recursiveUpdate notebookConfig {
         NotebookApp.use_redirect_file = false;
-        KernelSpecManager.whitelist = map (x: "${pkgs.lib.removeSuffix "-jupyter-kernel" x.name}") kernelDerivations;
+        KernelSpecManager.whitelist =
+          map (
+            x: "${pkgs.lib.removeSuffix "-jupyter-kernel" x.name}"
+          )
+          kernelDerivations;
       };
     in
       pkgs.runCommand "jupyter-dir" {} ''
@@ -140,8 +140,7 @@
       meta.mainProgram = "jupyter-lab";
       passthru = {
         kernels = builtins.listToAttrs (
-          builtins.map
-          (k: {
+          builtins.map (k: {
             name = k.name;
             value = k;
           })
@@ -149,7 +148,8 @@
         );
       };
     }
-    (''
+    (
+      ''
         mkdir -p $out/bin
         for i in ${jupyterlabEnv}/bin/*; do
           filename=$(basename $i)
@@ -166,22 +166,24 @@
             --set JUPYTER_RUNTIME_DIR ".jupyter/runtime"
         done
       ''
-      + (lib.strings.optionalString (
-          builtins.any
-          (kernel: (kernel ? kernelInstance && kernel.kernelInstance.language == "julia"))
-          kernelDerivations
-        ) ''
+      + (
+        lib.strings.optionalString
+        (builtins.any (
+            kernel: (kernel ? kernelInstance && kernel.kernelInstance.language == "julia")
+          )
+          kernelDerivations)
+        ''
           # add Julia for IJulia
           echo 'Adding Julia as an available package.'
           for i in ${pkgs.julia}/bin/*; do
             filename=$(basename $i)
             ln -s ${pkgs.julia}/bin/$filename $out/bin/$filename
           done
-        ''));
+        ''
+      )
+    );
 
-  /*
-  NixOS Modules stuff
-  */
+  # NixOS Modules stuff
   mkJupyterlabEval = customModule:
     pkgs.lib.evalModules {
       specialArgs = {
@@ -193,14 +195,10 @@
           ;
         mkPoetryKernel = import ../modules/poetry.nix;
       };
-      modules = lib.flatten (
-        [../modules]
-        ++ lib.optional (customModule != null) customModule
-      );
+      modules = lib.flatten ([../modules] ++ lib.optional (customModule != null) customModule);
     };
 
-  mkJupyterlabNew = customModule:
-    (mkJupyterlabEval customModule).config.build;
+  mkJupyterlabNew = customModule: (mkJupyterlabEval customModule).config.build;
 
   eval = mkJupyterlabEval ({...}: {_module.check = false;});
 
